@@ -9,7 +9,7 @@ import (
 )
 
 // namedTypeFromSchema objects for every graphql type, including scalars. There should only be one instance of Type for each thing
-func (cfg *Config) buildNamedTypes() NamedTypes {
+func (cfg *Generator) buildNamedTypes() NamedTypes {
 	types := map[string]*TypeDefinition{}
 	for _, schemaType := range cfg.schema.Types {
 		t := namedTypeFromSchema(schemaType)
@@ -27,7 +27,7 @@ func (cfg *Config) buildNamedTypes() NamedTypes {
 	return types
 }
 
-func (cfg *Config) bindTypes(namedTypes NamedTypes, destDir string, prog *loader.Program) {
+func (cfg *Generator) bindTypes(namedTypes NamedTypes, destDir string, prog *loader.Program) {
 	for _, t := range namedTypes {
 		if t.Package == "" {
 			continue

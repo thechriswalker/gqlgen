@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (cfg *Config) buildDirectives(types NamedTypes) ([]*Directive, error) {
+func (cfg *Generator) buildDirectives(types NamedTypes) ([]*Directive, error) {
 	var directives []*Directive
 
 	for name, dir := range cfg.schema.Directives {
