@@ -22,7 +22,7 @@ func TestTypeUnionAsInput(t *testing.T) {
 		union Bookmarkable = Item
 	`)
 
-	require.EqualError(t, err, "model plan failed: Bookmarkable! cannot be used as argument of Query.addBookmark. only input and scalar types are allowed")
+	require.EqualError(t, err, "exec plan failed: Bookmarkable! cannot be used as argument of Query.addBookmark. only input and scalar types are allowed")
 }
 
 func TestTypeInInput(t *testing.T) {
@@ -36,7 +36,7 @@ func TestTypeInInput(t *testing.T) {
 		}
 	`)
 
-	require.EqualError(t, err, "model plan failed: Item cannot be used as a field of BookmarkableInput. only input and scalar types are allowed")
+	require.EqualError(t, err, "exec plan failed: Item cannot be used as a field of BookmarkableInput. only input and scalar types are allowed")
 }
 
 func generate(name string, schema string, typemap ...config.TypeMap) error {

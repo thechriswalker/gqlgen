@@ -22,26 +22,22 @@ import (
 
 {{ range $model := .Models }}
 	{{with .Description}} {{.|prefixLines "// "}} {{end}}
-	{{- if .IsInterface }}
-		type {{.GoType}} interface {
-			Is{{.GoType}}()
+	{{- if or (eq .Kind "INTERFACE") (eq .Kind "UNION") }}
+		type {{ .Name|pubTypeLit }} interface {
+			Is{{.Name|pubTypeLit}}()
 		}
 	{{- else }}
-		type {{.GoType}} struct {
+		type {{.Name|pubTypeLit}} struct {
 			{{- range $field := .Fields }}
 				{{- with .Description}}
 					{{.|prefixLines "// "}}
 				{{- end}}
-				{{- if $field.GoFieldName }}
-					{{ $field.GoFieldName }} {{$field.Signature}} `json:"{{$field.GQLName}}"`
-				{{- else }}
-					{{ $field.GoFKName }} {{$field.GoFKType}}
-				{{- end }}
+				{{ $field.GoName|pubId}} {{ $field.Type | ref }} `json:"{{$field.Name}}"`
 			{{- end }}
 		}
 
 		{{- range $iface := .Implements }}
-			func ({{$model.GoType}}) Is{{$iface.GoType}}() {}
+			func ({{$model.Name|pubTypeLit}}) Is{{$iface}}() {}
 		{{- end }}
 
 	{{- end }}
@@ -49,42 +45,42 @@ import (
 
 {{ range $enum := .Enums }}
 	{{with .Description}}{{.|prefixLines "// "}} {{end}}
-	type {{.GoType}} string
+	type {{ $enum.Name|pubTypeLit }} string
 	const (
-	{{- range $value := .Values}}
+	{{- range $value := .EnumValues}}
 		{{- with .Description}}
 			{{.|prefixLines "// "}}
 		{{- end}}
-		{{$enum.GoType}}{{ .Name|toCamel }} {{$enum.GoType}} = {{.Name|quote}}
+		{{ $enum.Name|pubId }}{{ .Name|pubId }} {{ $enum.Name|pubTypeLit }} = {{.Name|quote}}
 	{{- end }}
 	)
 
-	func (e {{.GoType}}) IsValid() bool {
+	func (e {{ $enum.Name|pubTypeLit }}) IsValid() bool {
 		switch e {
-		case {{ range $index, $element := .Values}}{{if $index}},{{end}}{{ $enum.GoType }}{{ $element.Name|toCamel }}{{end}}:
+		case {{ range $index, $element := .EnumValues}}{{if $index}},{{end}}{{ $enum.Name|pubTypeLit }}{{ $element.Name|pubTypeLit }}{{end}}:
 			return true
 		}
 		return false
 	}
 
-	func (e {{.GoType}}) String() string {
+	func (e {{ $enum.Name|pubTypeLit }}) String() string {
 		return string(e)
 	}
 
-	func (e *{{.GoType}}) UnmarshalGQL(v interface{}) error {
+	func (e *{{ $enum.Name|pubTypeLit }}) UnmarshalGQL(v interface{}) error {
 		str, ok := v.(string)
 		if !ok {
 			return fmt.Errorf("enums must be strings")
 		}
 
-		*e = {{.GoType}}(str)
+		*e = {{ $enum.Name|pubTypeLit }}(str)
 		if !e.IsValid() {
-			return fmt.Errorf("%s is not a valid {{.GQLType}}", str)
+			return fmt.Errorf("%s is not a valid {{.Name}}", str)
 		}
 		return nil
 	}
 
-	func (e {{.GoType}}) MarshalGQL(w io.Writer) {
+	func (e {{ $enum.Name|pubTypeLit }}) MarshalGQL(w io.Writer) {
 		fmt.Fprint(w, strconv.Quote(e.String()))
 	}
 

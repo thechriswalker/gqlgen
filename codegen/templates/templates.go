@@ -15,7 +15,6 @@ import (
 	"unicode"
 
 	"github.com/99designs/gqlgen/internal/imports"
-
 	"github.com/pkg/errors"
 )
 
@@ -36,6 +35,10 @@ func Run(name string, tpldata interface{}) (*bytes.Buffer, error) {
 	})
 
 	for filename, data := range data {
+		if strings.Contains(filename, "/") {
+			continue
+		}
+
 		_, err := t.New(filename).Parse(data)
 		if err != nil {
 			panic(err)

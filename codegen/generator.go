@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/99designs/gqlgen/codegen/config"
+	"github.com/99designs/gqlgen/codegen/model"
 	"github.com/99designs/gqlgen/codegen/templates"
 	"github.com/pkg/errors"
 	"github.com/vektah/gqlparser/ast"
@@ -39,26 +40,15 @@ func (cfg *Generator) Generate() error {
 	_ = syscall.Unlink(cfg.Exec.Filename)
 	_ = syscall.Unlink(cfg.Model.Filename)
 
-	modelsBuild, err := cfg.models()
+	models, err := model.Generate(cfg.Config, cfg.schema)
 	if err != nil {
-		return errors.Wrap(err, "model plan failed")
+		return errors.Wrap(err, "model generation failed")
 	}
-	if len(modelsBuild.Models) > 0 || len(modelsBuild.Enums) > 0 {
-		if err = templates.RenderToFile("models.gotpl", cfg.Model.Filename, modelsBuild); err != nil {
-			return err
-		}
 
-		for _, model := range modelsBuild.Models {
-			modelCfg := cfg.Models[model.GQLType]
-			modelCfg.Model = cfg.Model.ImportPath() + "." + model.GoType
-			cfg.Models[model.GQLType] = modelCfg
-		}
-
-		for _, enum := range modelsBuild.Enums {
-			modelCfg := cfg.Models[enum.GQLType]
-			modelCfg.Model = cfg.Model.ImportPath() + "." + enum.GoType
-			cfg.Models[enum.GQLType] = modelCfg
-		}
+	for name, newCfg := range models {
+		modelCfg := cfg.Models[name]
+		modelCfg.Model = newCfg.Model
+		cfg.Models[name] = modelCfg
 	}
 
 	build, err := cfg.bind()
@@ -66,7 +56,7 @@ func (cfg *Generator) Generate() error {
 		return errors.Wrap(err, "exec plan failed")
 	}
 
-	if err := templates.RenderToFile("generated.gotpl", cfg.Exec.Filename, build); err != nil {
+	if err = templates.RenderToFile("generated.gotpl", cfg.Exec.Filename, build); err != nil {
 		return err
 	}
 
@@ -76,7 +66,7 @@ func (cfg *Generator) Generate() error {
 		}
 	}
 
-	if err := cfg.validate(); err != nil {
+	if err := cfg.ValidateGeneratedCode(); err != nil {
 		return errors.Wrap(err, "validation failed")
 	}
 

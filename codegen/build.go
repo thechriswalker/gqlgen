@@ -3,12 +3,10 @@ package codegen
 import (
 	"fmt"
 	"go/build"
-	"go/types"
 	"os"
 
 	"github.com/99designs/gqlgen/codegen/config"
 	"github.com/pkg/errors"
-	"golang.org/x/tools/go/loader"
 )
 
 type Build struct {
@@ -24,12 +22,6 @@ type Build struct {
 	Directives       []*Directive
 }
 
-type ModelBuild struct {
-	PackageName string
-	Models      []Model
-	Enums       []Enum
-}
-
 type ResolverBuild struct {
 	PackageName   string
 	ResolverType  string
@@ -43,33 +35,9 @@ type ServerBuild struct {
 	ResolverPackageName string
 }
 
-// Create a list of models that need to be generated
-func (cfg *Generator) models() (*ModelBuild, error) {
-	namedTypes := cfg.buildNamedTypes()
-
-	progLoader := cfg.newLoaderWithoutErrors()
-
-	prog, err := progLoader.Load()
-	if err != nil {
-		return nil, errors.Wrap(err, "loading failed")
-	}
-
-	cfg.bindTypes(namedTypes, cfg.Model.Dir(), prog)
-
-	models, err := cfg.buildModels(namedTypes, prog)
-	if err != nil {
-		return nil, err
-	}
-	return &ModelBuild{
-		PackageName: cfg.Model.Package,
-		Models:      models,
-		Enums:       cfg.buildEnums(namedTypes),
-	}, nil
-}
-
 // bind a schema together with some code to generate a Build
 func (cfg *Generator) resolver() (*ResolverBuild, error) {
-	progLoader := cfg.newLoaderWithoutErrors()
+	progLoader := cfg.NewLoaderWithoutErrors()
 	progLoader.Import(cfg.Resolver.ImportPath())
 
 	prog, err := progLoader.Load()
@@ -111,7 +79,7 @@ func (cfg *Generator) server(destDir string) *ServerBuild {
 func (cfg *Generator) bind() (*Build, error) {
 	namedTypes := cfg.buildNamedTypes()
 
-	progLoader := cfg.newLoaderWithoutErrors()
+	progLoader := cfg.NewLoaderWithoutErrors()
 	prog, err := progLoader.Load()
 	if err != nil {
 		return nil, errors.Wrap(err, "loading failed")
@@ -157,30 +125,6 @@ func (cfg *Generator) bind() (*Build, error) {
 		b.SubscriptionRoot = b.Objects.ByName(cfg.schema.Subscription.Name)
 	}
 	return b, nil
-}
-
-func (cfg *Generator) validate() error {
-	progLoader := cfg.newLoaderWithErrors()
-	_, err := progLoader.Load()
-	return err
-}
-
-func (cfg *Generator) newLoaderWithErrors() loader.Config {
-	conf := loader.Config{}
-
-	for _, pkg := range cfg.Models.ReferencedPackages() {
-		conf.Import(pkg)
-	}
-	return conf
-}
-
-func (cfg *Generator) newLoaderWithoutErrors() loader.Config {
-	conf := cfg.newLoaderWithErrors()
-	conf.AllowErrors = true
-	conf.TypeChecker = types.Config{
-		Error: func(e error) {},
-	}
-	return conf
 }
 
 func resolvePkg(pkgName string) (string, error) {

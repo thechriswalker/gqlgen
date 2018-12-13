@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"go/build"
+	"go/types"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/vektah/gqlparser"
 	"github.com/vektah/gqlparser/ast"
+	"golang.org/x/tools/go/loader"
 	"gopkg.in/yaml.v2"
 )
 
@@ -172,23 +174,23 @@ func (c *PackageConfig) IsDefined() bool {
 	return c.Filename != ""
 }
 
-func (cfg *Config) Check() error {
-	if err := cfg.Models.Check(); err != nil {
+func (c *Config) Check() error {
+	if err := c.Models.Check(); err != nil {
 		return errors.Wrap(err, "config.models")
 	}
-	if err := cfg.Exec.Check(); err != nil {
+	if err := c.Exec.Check(); err != nil {
 		return errors.Wrap(err, "config.exec")
 	}
-	if err := cfg.Model.Check(); err != nil {
+	if err := c.Model.Check(); err != nil {
 		return errors.Wrap(err, "config.model")
 	}
-	if cfg.Resolver.IsDefined() {
-		if err := cfg.Resolver.Check(); err != nil {
+	if c.Resolver.IsDefined() {
+		if err := c.Resolver.Check(); err != nil {
 			return errors.Wrap(err, "config.resolver")
 		}
 	}
 
-	return cfg.normalize()
+	return c.normalize()
 }
 
 type TypeMap map[string]TypeMapEntry
@@ -196,6 +198,15 @@ type TypeMap map[string]TypeMapEntry
 func (tm TypeMap) Exists(typeName string) bool {
 	_, ok := tm[typeName]
 	return ok
+}
+
+func (tm TypeMap) IsDefined(typeName string) bool {
+	m, ok := tm[typeName]
+	if !ok {
+		return false
+	}
+
+	return m.Model != ""
 }
 
 func (tm TypeMap) Check() error {
@@ -269,43 +280,45 @@ func findCfgInDir(dir string) string {
 	return ""
 }
 
-func (cfg *Config) normalize() error {
-	if err := cfg.Model.normalize(); err != nil {
+func (c *Config) normalize() error {
+	if err := c.Model.normalize(); err != nil {
 		return errors.Wrap(err, "model")
 	}
 
-	if err := cfg.Exec.normalize(); err != nil {
+	if err := c.Exec.normalize(); err != nil {
 		return errors.Wrap(err, "exec")
 	}
 
-	if cfg.Resolver.IsDefined() {
-		if err := cfg.Resolver.normalize(); err != nil {
+	if c.Resolver.IsDefined() {
+		if err := c.Resolver.normalize(); err != nil {
 			return errors.Wrap(err, "resolver")
 		}
 	}
 
 	builtins := TypeMap{
-		"__Directive":  {Model: "github.com/99designs/gqlgen/graphql/introspection.Directive"},
-		"__Type":       {Model: "github.com/99designs/gqlgen/graphql/introspection.Type"},
-		"__Field":      {Model: "github.com/99designs/gqlgen/graphql/introspection.Field"},
-		"__EnumValue":  {Model: "github.com/99designs/gqlgen/graphql/introspection.EnumValue"},
-		"__InputValue": {Model: "github.com/99designs/gqlgen/graphql/introspection.InputValue"},
-		"__Schema":     {Model: "github.com/99designs/gqlgen/graphql/introspection.Schema"},
-		"Int":          {Model: "github.com/99designs/gqlgen/graphql.Int"},
-		"Float":        {Model: "github.com/99designs/gqlgen/graphql.Float"},
-		"String":       {Model: "github.com/99designs/gqlgen/graphql.String"},
-		"Boolean":      {Model: "github.com/99designs/gqlgen/graphql.Boolean"},
-		"ID":           {Model: "github.com/99designs/gqlgen/graphql.ID"},
-		"Time":         {Model: "github.com/99designs/gqlgen/graphql.Time"},
-		"Map":          {Model: "github.com/99designs/gqlgen/graphql.Map"},
+		"__DirectiveLocation": {Model: "github.com/99designs/gqlgen/graphql.String"},
+		"__TypeKind":          {Model: "github.com/99designs/gqlgen/graphql.String"},
+		"__Directive":         {Model: "github.com/99designs/gqlgen/graphql/introspection.Directive"},
+		"__Type":              {Model: "github.com/99designs/gqlgen/graphql/introspection.Type"},
+		"__Field":             {Model: "github.com/99designs/gqlgen/graphql/introspection.Field"},
+		"__EnumValue":         {Model: "github.com/99designs/gqlgen/graphql/introspection.EnumValue"},
+		"__InputValue":        {Model: "github.com/99designs/gqlgen/graphql/introspection.InputValue"},
+		"__Schema":            {Model: "github.com/99designs/gqlgen/graphql/introspection.Schema"},
+		"Int":                 {Model: "github.com/99designs/gqlgen/graphql.Int"},
+		"Float":               {Model: "github.com/99designs/gqlgen/graphql.Float"},
+		"String":              {Model: "github.com/99designs/gqlgen/graphql.String"},
+		"Boolean":             {Model: "github.com/99designs/gqlgen/graphql.Boolean"},
+		"ID":                  {Model: "github.com/99designs/gqlgen/graphql.ID"},
+		"Time":                {Model: "github.com/99designs/gqlgen/graphql.Time"},
+		"Map":                 {Model: "github.com/99designs/gqlgen/graphql.Map"},
 	}
 
-	if cfg.Models == nil {
-		cfg.Models = TypeMap{}
+	if c.Models == nil {
+		c.Models = TypeMap{}
 	}
 	for typeName, entry := range builtins {
-		if !cfg.Models.Exists(typeName) {
-			cfg.Models[typeName] = entry
+		if !c.Models.Exists(typeName) {
+			c.Models[typeName] = entry
 		}
 	}
 
@@ -322,8 +335,7 @@ func (c *Config) LoadSchema() (*ast.Schema, map[string]string, error) {
 		var schemaRaw []byte
 		schemaRaw, err = ioutil.ReadFile(filename)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "unable to open schema: "+err.Error())
-			os.Exit(1)
+			panic("unable to open schema: " + err.Error())
 		}
 		schemaStrings[filename] = string(schemaRaw)
 		sources = append(sources, &ast.Source{Name: filename, Input: schemaStrings[filename]})
@@ -334,6 +346,30 @@ func (c *Config) LoadSchema() (*ast.Schema, map[string]string, error) {
 		return nil, nil, err
 	}
 	return schema, schemaStrings, nil
+}
+
+func (c *Config) ValidateGeneratedCode() error {
+	progLoader := c.NewLoaderWithErrors()
+	_, err := progLoader.Load()
+	return err
+}
+
+func (c *Config) NewLoaderWithErrors() loader.Config {
+	conf := loader.Config{}
+
+	for _, pkg := range c.Models.ReferencedPackages() {
+		conf.Import(pkg)
+	}
+	return conf
+}
+
+func (c *Config) NewLoaderWithoutErrors() loader.Config {
+	conf := c.NewLoaderWithErrors()
+	conf.AllowErrors = true
+	conf.TypeChecker = types.Config{
+		Error: func(e error) {},
+	}
+	return conf
 }
 
 var invalidPackageNameChar = regexp.MustCompile(`[^\w]`)

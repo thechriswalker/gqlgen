@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"go/format"
 	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -11,29 +13,29 @@ import (
 func main() {
 	dir := "./"
 
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		panic(err)
-	}
-
 	out := bytes.Buffer{}
 	out.WriteString("package templates\n\n")
 	out.WriteString("var data = map[string]string{\n")
 
-	for _, f := range files {
+	walkErr := filepath.Walk(dir, func(path string, f os.FileInfo, err error) error {
 		if !strings.HasSuffix(f.Name(), ".gotpl") {
-			continue
+			return nil
 		}
 
-		b, err := ioutil.ReadFile(dir + f.Name())
+		b, err := ioutil.ReadFile(path)
 		if err != nil {
 			panic(err)
 		}
 
-		out.WriteString(strconv.Quote(f.Name()))
+		out.WriteString(strconv.Quote(path))
 		out.WriteRune(':')
 		out.WriteString(strconv.Quote(string(b)))
 		out.WriteString(",\n")
+
+		return nil
+	})
+	if walkErr != nil {
+		panic(walkErr)
 	}
 
 	out.WriteString("}\n")

@@ -39,6 +39,8 @@ func (s *Imports) String() string {
 }
 
 func (s *Imports) Reserve(path string, aliases ...string) string {
+	path = gopath.NormalizeVendor(path)
+
 	if path == "" {
 		panic("empty ambient import")
 	}
@@ -78,6 +80,8 @@ func (s *Imports) Reserve(path string, aliases ...string) string {
 }
 
 func (s *Imports) Lookup(path string) string {
+	path = gopath.NormalizeVendor(path)
+
 	if path == "" {
 		return ""
 	}
